@@ -1,44 +1,28 @@
 #!/bin/bash
 set -euo pipefail
 
-Xvfb :1 -screen 0 1920x1080x24 &
-sleep 2
-fluxbox &
-x11vnc -display :1 -forever -shared -nopw -rfbport 5900 &
-websockify --web=/usr/share/novnc/ 8080 localhost:5900 &
-
 export DISPLAY=:1
-export WINEPREFIX="${WINEPREFIX:-/root/.wine}"
+export WINEPREFIX=/root/.wine
+export PYTHONUNBUFFERED=1
 
 mkdir -p "$WINEPREFIX"
+chown -R root:root "$WINEPREFIX" || true
 
-CUR_UID="$(id -u)"
-CUR_GID="$(id -g)"
-OWN_UID="$(stat -c %u "$WINEPREFIX" 2>/dev/null || echo "$CUR_UID")"
-OWN_GID="$(stat -c %g "$WINEPREFIX" 2>/dev/null || echo "$CUR_GID")"
+# start X stack
+Xvfb :1 -screen 0 1920x1080x24 -ac +extension GLX +render -noreset >/tmp/xvfb.log 2>&1 &
+fluxbox >/tmp/fluxbox.log 2>&1 &
+x11vnc -display :1 -forever -shared -rfbport 5900 -nopw >/tmp/x11vnc.log 2>&1 &
+websockify --web=/usr/share/novnc 8080 localhost:5900 >/tmp/websockify.log 2>&1 &
 
-if [ "$CUR_UID" != "$OWN_UID" ] || [ "$CUR_GID" != "$OWN_GID" ]; then
-  chown -R "$CUR_UID:$CUR_GID" "$WINEPREFIX"
-fi
-chmod 700 "$WINEPREFIX" || true
+sleep 2
 
-MT5_BIN="$(find "$WINEPREFIX/drive_c" -iname "terminal64.exe" 2>/dev/null | head -n 1 || true)"
-
-if [ -z "$MT5_BIN" ]; then
-  echo "[INFO] MT5 not found. Launching installer..."
-  wineboot -i || true
-  # interactive installer via VNC
-  wine /app/mt5setup.exe || true
-  sleep 3
-  MT5_BIN="$(find "$WINEPREFIX/drive_c" -iname "terminal64.exe" 2>/dev/null | head -n 1 || true)"
-fi
-
-if [ -n "$MT5_BIN" ]; then
-  echo "[INFO] Starting MT5: $MT5_BIN"
-  wine "$MT5_BIN" &
+# run MT5 (installed terminal if exists, otherwise installer)
+TERMINAL_EXE="$(find "$WINEPREFIX/drive_c" -type f -iname terminal64.exe 2>/dev/null | head -n1 || true)"
+if [[ -n "${TERMINAL_EXE}" ]]; then
+  wine "$TERMINAL_EXE" >/tmp/mt5.log 2>&1 &
 else
-  echo "[WARN] terminal64.exe not found after installer."
+  wine /app/mt5setup.exe >/tmp/mt5-install.log 2>&1 &
 fi
 
-cd /app
-exec uvicorn main:app --host 0.0.0.0 --port 8000
+# start FastAPI in foreground (keeps container alive + logs visible)
+exec uvicorn main:app --host 0.0.0.0 --port 8000 --app-dir /app
