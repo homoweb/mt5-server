@@ -1,0 +1,15 @@
+services:
+  metatrader:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: mt5_app
+    restart: always
+    user: "0:0"
+    env_file:
+      - .env
+    ports:
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ../mt5_data:/root/.wine
