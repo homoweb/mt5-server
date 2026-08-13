@@ -89,4 +89,5 @@ class MetaTraderService
 Run the following command on a clean Ubuntu server (requires root / sudo permissions):
 
 ```bash
-curl -Ls -o mt5-deploy https://raw.githubusercontent.com/homoweb/mt5-server/main/script.sh && chmod +x mt5-deploy && ./mt5-deploy
+git clone https://github.com/homoweb/mt5-server.git /opt/mt5-server && cd /opt/mt5-server && chmod +x deploy/install.sh docker/entrypoint.sh && ./deploy/install.sh
+
